@@ -1,122 +1,58 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import React, { useState } from 'react';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [isConnected, setIsConnected] = useState<boolean>(false);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <div className="min-h-screen bg-[#070b14] text-[#e2e8f0] p-6 font-sans">
+      {/* Dashboard Top Header Control Panel */}
+      <header className="max-w-6xl mx-auto flex justify-between items-center border-b border-[#1e293b] pb-4 mb-8">
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Edge Telemetry Control Center</h1>
+          <p className="text-sm text-[#94a3b8] mt-1">Local workstation monitor via distributed sockets</p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        
+        {/* System Network Connection Status Badge */}
+        <div className="flex items-center gap-2 bg-[#0f172a] border border-[#1e293b] px-4 py-2 rounded-lg">
+          <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+          <span className="text-xs font-mono uppercase tracking-wider text-[#94a3b8]">
+            {isConnected ? 'Active Stream' : 'Disconnected'}
+          </span>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* Main Grid Layout Panels */}
+      <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* Panel 1: CPU Layout Panels */}
+        <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">Processor Utilization</h2>
+            <span className="text-xl font-mono text-cyan-400 font-bold">0.0%</span>
+          </div>
+          {/* Placeholder for Live Chart Graphic */}
+          <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
+            {/* TODO: import recharts responsive container & link socket stream here */}
+            [ CPU Chart Canvas Area ]
+          </div>
+        </section>
+
+        {/* Panel 2: Memory/RAM Monitoring Card */}
+        <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">System Memory Pool</h2>
+            <span className="text-xl font-mono text-violet-400 font-bold">0.00 / 0.00 GB</span>
+          </div>
+          {/* Placeholder for Live Chart Graphic */}
+          <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
+            {/* TODO: pass live ramUsedPercent array data into area chart */}
+            [ RAM Chart Canvas Area ]
+          </div>
+        </section>
+
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
