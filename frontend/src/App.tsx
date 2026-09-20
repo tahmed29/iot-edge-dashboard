@@ -38,7 +38,6 @@ interface RecievedSample {
   receivedAt: number;
 }
 
-
 // Quick validation functions to make sure network data is clean
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -50,6 +49,32 @@ function isNonNegativeNumber(value: unknown): value is number {
 
 function isPercent(value: unknown): value is number {
   return isNonNegativeNumber(value) && value <= 100;
+}
+
+function isServerMessage(value: unknown): value is ServerMessage {
+  if (!isRecord(value) || typeof value.timestamp !== "string" || !Number.isFinite(Date.parse(value.timestamp))) {
+    return false;
+  }
+
+  if (value.type === "telemetry_error") {
+    return typeof value.message === "string";
+  }
+
+  if (value.type !== "telemetry" || !isRecord(value.cpu) || !isRecord(value.memory)) {
+  return false;
+}
+
+const { cpu, memory } = value as Record<string, any>;
+return (
+    isPercent(cpu.usagePercent) &&
+    isPercent(memory.usagePercent) &&
+    isNonNegativeNumber(memory.totalBytes) &&
+    memory.totalbytes > 0 &&
+    isNonNegativeNumber(memory.usedBytes) &&
+    memory.usedBytes <= memory.totalBytes &&
+    isNonNegativeNumber(memory.availableBytes) &&
+    memory.availableBytes <= memory.totalBytes
+);
 }
 
 // Helper to keep our timeline data capped at exactly 20 seconds
