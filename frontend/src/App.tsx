@@ -1,7 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 function App() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [serverData, setServerData] = useState<any>(null);
+
+  useEffect(() => {
+    // Establish WebSocket connection to the server
+    const socket = new WebSocket('ws://localhost:8080'); 
+
+    socket.onopen = () => {
+      console.log('Connected to backend telemetry stream!');
+      setIsConnected(true);
+    }
+
+    socket.onmessage = (event) => {
+      const parsed = JSON.parse(event.data);
+      console.log('Incoming raw hardware sample:', parsed);
+      setServerData(parsed); // saving payload to local state
+    }
+
+    socket.onclose = () => {
+      console.log('Socket closed.');
+      setIsConnected(false);
+    }
+
+    return () => socket.close(); 
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#070b14] text-[#e2e8f0] p-6 font-sans">
@@ -23,17 +47,17 @@ function App() {
 
       {/* Main Grid Layout Panels */}
       <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-
         {/* Panel 1: CPU Layout Panels */}
         <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">Processor Utilization</h2>
-            <span className="text-xl font-mono text-cyan-400 font-bold">0.0%</span>
+            <span className="text-xl font-mono text-cyan-400 font-bold">
+              {serverData?.data ? `${serverData.data.cpuLoad}%` : '0.0%'}
+            </span>
           </div>
-          {/* Placeholder for Live Chart Graphic */}
+          {/* Live Chart Graphic */}
           <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            {/* TODO: import recharts responsive container & link socket stream here */}
-            [ CPU Chart Canvas Area ]
+            [ TODO: replace placeholder with chart engine canvas ]
           </div>
         </section>
 
@@ -41,15 +65,15 @@ function App() {
         <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">System Memory Pool</h2>
-            <span className="text-xl font-mono text-violet-400 font-bold">0.00 / 0.00 GB</span>
+            <span className="text-xl font-mono text-violet-400 font-bold">
+              {serverData?.data ? `${serverData.data.ramUsedPercent}%` : '0.0%'}
+            </span>
           </div>
-          {/* Placeholder for Live Chart Graphic */}
+          {/* Live Chart Graphic */}
           <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            {/* TODO: pass live ramUsedPercent array data into area chart */}
-            [ RAM Chart Canvas Area ]
+            [ TODO: pass history array into graph rows ]
           </div>
         </section>
-
       </main>
     </div>
   );
