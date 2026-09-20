@@ -1,5 +1,63 @@
 import React, { useEffect, useState } from 'react';
 
+const SOCKET_URL = "ws://127.0.0.1:8080";
+const HISTORY_MS = 20_000;
+const STALE_MS = 3_000;
+
+interface TelemetryMessage {
+  type: "telemetry";
+  timestamp: string;
+  cpu: {
+    usagePercent: number;
+  };
+  memory: {
+    totalBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    usagePercent: number;
+  };
+}
+
+interface TelemetryErrorMessage {
+  type: "telemetry_error";
+  timestamp: string;
+  message: string;
+}
+
+type ServerMessage = TelemetryMessage | TelemetryErrorMessage;
+type ConnectionStatus = "connecting" | "connected" | "reconnecting";
+
+interface HistoryPoint {
+  time: number;
+  cpu: number | null;
+  ram: number | null;
+}
+
+interface RecievedSample {
+  message: TelemetryMessage;
+  receivedAt: number;
+}
+
+
+// Quick validation functions to make sure network data is clean
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isPercent(value: unknown): value is number {
+  return isNonNegativeNumber(value) && value <= 100;
+}
+
+// Helper to keep our timeline data capped at exactly 20 seconds
+function trimHistory(points: any[], now: number): any[] {
+  const HISTORY_MS = 20_000;
+  return points.filter((point) => point.time >= now - HISTORY_MS).slice(-200);
+}
+
 function App() {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [serverData, setServerData] = useState<any>(null);
