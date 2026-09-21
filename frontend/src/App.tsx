@@ -1,4 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 const SOCKET_URL = "ws://127.0.0.1:8080";
 const HISTORY_MS = 20_000;
@@ -283,6 +292,60 @@ function useTelemetry() {
   return { connection, latest, history, problem, now, stale };
 }
 
+interface MetricChartProps {
+  title: string;
+  metric: "cpu" | "ram";
+  color: string;
+  value: number | null;
+  history: HistoryPoint[];
+  now: number;
+  fresh: boolean;
+}
+
+function MetricChart({ title, metric, color, value, history, now, fresh }: MetricChartProps) {
+  const gradientId = `${metric}-gradient`;
+  const values = history.map((p) => p[metric]).filter((v): v is number => v !== null);
+  const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+  const peak = values.length ? Math.max(...values) : null;
+
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-[#0f172a] p-6 shadow-xl">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+          <h2 className="text-sm font-semibold tracking-wider text-[#94a3b8] uppercase">{title}</h2>
+        </div>
+        <span className="text-2xl font-mono font-bold" style={{ color: fresh ? color : "#64748b" }}>
+          {value === null ? "0.0%" : `${value.toFixed(1)}%`}
+        </span>
+      </div>
+
+      <div className="relative h-48 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={history} margin={{ top: 10, right: 5, bottom: 0, left: -20 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+                <stop offset="100%" stopColor={color} stopOpacity={0.0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#1e293b" strokeDasharray="3 6" vertical={false} />
+            <XAxis dataKey="time" type="number" scale="time" domain={[now - HISTORY_MS, now]} tick={false} axisLine={false} />
+            <YAxis domain={[0, 100]} stroke="#475569" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+            <Area type="monotone" dataKey={metric} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} isAnimationActive={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex justify-between font-mono text-[11px] text-[#64748b] border-t border-[#1e293b] pt-4 mt-2">
+        <span>AVG: <span className="text-slate-300">{average ? `${average.toFixed(1)}%` : "N/A"}</span></span>
+        <span>PEAK: <span className="text-slate-300">{peak ? `${peak.toFixed(1)}%` : "N/A"}</span></span>
+        <span>{values.length} samples</span>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   // Activating the master telemetry stream hook we built in the top half
   const { connection, latest, history, problem, now, stale } = useTelemetry();
@@ -338,35 +401,25 @@ function App() {
 
       {/* Main Grid Layout Panels */}
       <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Panel 1: CPU Layout Panels */}
-        <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">Processor Utilization</h2>
-            <span className="text-xl font-mono text-cyan-400 font-bold">
-              {telemetry ? `${telemetry.cpu.usagePercent.toFixed(1)}%` : '0.0%'}
-            </span>
-          </div>
-          {/* Live Chart Graphic Placeholder */}
-          <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            {/* TODO: link history timeline arrays to a re-charts sub-component widget */}
-            [ CPU Chart Canvas Area ]
-          </div>
-        </section>
+        <MetricChart
+          title="Processor Utilization"
+          metric="cpu"
+          color="#22d3ee"
+          value={telemetry?.cpu.usagePercent ?? null}
+          history={history}
+          now={now}
+          fresh={fresh}
+        />
 
-        {/* Panel 2: Memory/RAM Monitoring Card */}
-        <section className="bg-[#0f172a] border border-[#1e293b] p-6 rounded-xl shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">System Memory Pool</h2>
-            <span className="text-xl font-mono text-violet-400 font-bold">
-              {telemetry ? `${telemetry.memory.usagePercent.toFixed(1)}%` : '0.0%'}
-            </span>
-          </div>
-          {/* Live Chart Graphic Placeholder */}
-          <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            {/* TODO: map background history arrays into linear graphic vectors */}
-            [ RAM Chart Canvas Area ]
-          </div>
-        </section>
+        <MetricChart
+          title="System Memory Pool"
+          metric="ram"
+          color="#a78bfa"
+          value={telemetry?.memory.usagePercent ?? null}
+          history={history}
+          now={now}
+          fresh={fresh}
+        />
       </main>
     </div>
   );
