@@ -78,9 +78,209 @@ return (
 }
 
 // Helper to keep our timeline data capped at exactly 20 seconds
-function trimHistory(points: any[], now: number): any[] {
-  const HISTORY_MS = 20_000;
-  return points.filter((point) => point.time >= now - HISTORY_MS).slice(-200);
+function trimHistory(points: HistoryPoint[], now: number): HistoryPoint[] {
+  return points
+    .filter((point) => point.time > now - HISTORY_MS)
+    .slice(-200);
+}
+
+// Helper to convert raw bytes into readable Gigabytes
+function formatGiB(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+// Helper to format timestamps into a clean digital clock
+function formatTime(time: number): string {
+  return new Date(time).toLocaleTimeString([], { 
+    hour12: false, 
+    hour: "2-digit", 
+    minute: "2-digit", 
+    second: "2-digit", 
+  });
+}
+
+function useTelemetry() {
+  const [connection, setConnection] =
+    useState<ConnectionStatus>("connecting");
+  const [latest, setLatest] = useState<RecievedSample | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let disposed = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: number | undefined;
+    let connectionTimer: number | undefined;
+    let retryAttempt = 0;
+    let lastValidAt = 0;
+    let lastMessageAt = Date.now();
+
+    function addGap(time: number) {
+      setHistory((previous) =>
+        trimHistory(
+          [...previous, { time, cpu: null, ram: null }],
+          time,
+        ),
+      );
+    }
+
+    function connect() {
+      if (disposed) return;
+
+      const current = new WebSocket(SOCKET_URL);
+      socket = current;
+      lastMessageAt = Date.now();
+
+      // Avoid waiting indefinitely for a connection.
+      connectionTimer = window.setTimeout(() => {
+        if (current.readyState === WebSocket.CONNECTING) {
+          current.close();
+        }
+      }, 5_000);
+
+      current.onopen = () => {
+        if (disposed) return;
+
+        window.clearTimeout(connectionTimer);
+        lastMessageAt = Date.now();
+        setConnection("connected");
+        setProblem(null);
+      };
+
+      current.onmessage = (event: MessageEvent<unknown>) => {
+        if (disposed) return;
+
+        try {
+          if (typeof event.data !== "string") {
+            throw new Error("Expected a text message.");
+          }
+
+          const parsed: unknown = JSON.parse(event.data);
+
+          if (!isServerMessage(parsed)) {
+            throw new Error("Unexpected telemetry structure.");
+          }
+
+          const receivedAt = Date.now();
+          lastMessageAt = receivedAt;
+          retryAttempt = 0;
+          setNow(receivedAt);
+
+          if (parsed.type === "telemetry_error") {
+            setProblem(parsed.message);
+            addGap(receivedAt);
+            return;
+          }
+
+          const previousValidAt = lastValidAt;
+          lastValidAt = receivedAt;
+
+          setProblem(null);
+          setLatest({ message: parsed, receivedAt });
+
+          setHistory((previous) => {
+            const points = [...previous];
+
+            // Preserve a visible gap if the browser was paused or delayed.
+            if (
+              previousValidAt > 0 &&
+              receivedAt - previousValidAt > STALE_MS
+            ) {
+              points.push({
+                time: receivedAt - 1,
+                cpu: null,
+                ram: null,
+              });
+            }
+
+            points.push({
+              time: receivedAt,
+              cpu: parsed.cpu.usagePercent,
+              ram: parsed.memory.usagePercent,
+            });
+
+            return trimHistory(points, receivedAt);
+          });
+        } catch {
+          setProblem("Received an invalid telemetry message.");
+          addGap(Date.now());
+        }
+      };
+
+      current.onerror = () => {
+        if (disposed) return;
+
+        setProblem("Cannot reach the local telemetry server.");
+        // The close handler owns retry scheduling.
+        current.close();
+      };
+
+      current.onclose = () => {
+        if (disposed) return;
+
+        window.clearTimeout(connectionTimer);
+        socket = null;
+        setConnection("reconnecting");
+        addGap(Date.now());
+
+        // Retry after 1, 2, 4, 8, then at most 15 seconds.
+        const delay = Math.min(
+          1_000 * 2 ** Math.min(retryAttempt, 4),
+          15_000,
+        );
+
+        retryAttempt += 1;
+        retryTimer = window.setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+
+    // Advance the timeline even if messages stop arriving.
+    const clockTimer = window.setInterval(() => {
+      const time = Date.now();
+      setNow(time);
+
+      setHistory((previous) => {
+        const points = trimHistory(previous, time);
+
+        if (lastValidAt > 0 && time - lastValidAt > STALE_MS) {
+          points.push({ time, cpu: null, ram: null });
+        }
+
+        return points.slice(-200);
+      });
+
+      // Recover from a connection that appears open but has gone silent.
+      if (
+        socket?.readyState === WebSocket.OPEN &&
+        time - lastMessageAt > 10_000
+      ) {
+        socket.close(4000, "Telemetry stream timed out");
+      }
+    }, 1_000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(clockTimer);
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(connectionTimer);
+
+      if (socket) {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.close();
+      }
+    };
+  }, []);
+
+  const stale =
+    latest === null || now - latest.receivedAt > STALE_MS;
+
+  return { connection, latest, history, problem, now, stale };
 }
 
 function App() {
