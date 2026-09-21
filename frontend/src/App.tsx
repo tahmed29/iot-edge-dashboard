@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Area,
   AreaChart,
   CartesianGrid,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -73,12 +72,12 @@ function isServerMessage(value: unknown): value is ServerMessage {
   return false;
 }
 
-const { cpu, memory } = value as Record<string, any>;
+const { cpu, memory } = value;
 return (
     isPercent(cpu.usagePercent) &&
     isPercent(memory.usagePercent) &&
     isNonNegativeNumber(memory.totalBytes) &&
-    memory.totalbytes > 0 &&
+    memory.totalBytes > 0 &&
     isNonNegativeNumber(memory.usedBytes) &&
     memory.usedBytes <= memory.totalBytes &&
     isNonNegativeNumber(memory.availableBytes) &&
@@ -95,7 +94,7 @@ function trimHistory(points: HistoryPoint[], now: number): HistoryPoint[] {
 
 // Helper to convert raw bytes into readable Gigabytes
 function formatGiB(bytes: number): string {
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }
 
 // Helper to format timestamps into a clean digital clock
@@ -106,6 +105,55 @@ function formatTime(time: number): string {
     minute: "2-digit", 
     second: "2-digit", 
   });
+}
+
+// Convert the backend's payload into the structure used by the dashboard.
+function parseServerMessage(value: unknown): ServerMessage {
+  // Already matches our dashboard format, including telemetry errors.
+  if (isServerMessage(value)) {
+    return value;
+  }
+
+  if (
+    !isRecord(value) ||
+    value.type !== "telemetry" ||
+    typeof value.timestamp !== "string" ||
+    !Number.isFinite(Date.parse(value.timestamp)) ||
+    !isRecord(value.data)
+  ) {
+    throw new Error("Unexpected telemetry structure.");
+  }
+
+  const data = value.data;
+
+  if (
+    !isPercent(data.cpuLoad) ||
+    !isPercent(data.ramUsedPercent) ||
+    !isNonNegativeNumber(data.ramTotal) ||
+    data.ramTotal <= 0 ||
+    !isNonNegativeNumber(data.ramUsed) ||
+    data.ramUsed > data.ramTotal
+  ) {
+    throw new Error("Telemetry contains invalid CPU or RAM values.");
+  }
+
+  return {
+    type: "telemetry",
+    timestamp: value.timestamp,
+    cpu: {
+      usagePercent: data.cpuLoad,
+    },
+    memory: {
+      totalBytes: data.ramTotal,
+      usedBytes: data.ramUsed,
+
+      // The backend does not send available RAM.
+      // This is the remaining amount calculated from total minus used.
+      availableBytes: data.ramTotal - data.ramUsed,
+
+      usagePercent: data.ramUsedPercent,
+    },
+  };
 }
 
 function useTelemetry() {
@@ -165,11 +213,7 @@ function useTelemetry() {
             throw new Error("Expected a text message.");
           }
 
-          const parsed: unknown = JSON.parse(event.data);
-
-          if (!isServerMessage(parsed)) {
-            throw new Error("Unexpected telemetry structure.");
-          }
+          const parsed = parseServerMessage(JSON.parse(event.data));
 
           const receivedAt = Date.now();
           lastMessageAt = receivedAt;
@@ -211,8 +255,19 @@ function useTelemetry() {
 
             return trimHistory(points, receivedAt);
           });
-        } catch {
-          setProblem("Received an invalid telemetry message.");
+        } catch (error) {
+          const reason =
+            error instanceof Error ? error.message : String(error);
+
+          const rawMessage =
+            typeof event.data === "string"
+            ? event.data
+            : "[Received non-text data]";
+
+          console.error("Telemetry processing failed:", error);
+          console.log("Raw WebSocket message:", event.data);
+
+          setProblem(`${reason} | Received: ${rawMessage}`);
           addGap(Date.now());
         }
       };
@@ -316,7 +371,7 @@ function MetricChart({ title, metric, color, value, history, now, fresh }: Metri
           <h2 className="text-sm font-semibold tracking-wider text-[#94a3b8] uppercase">{title}</h2>
         </div>
         <span className="text-2xl font-mono font-bold" style={{ color: fresh ? color : "#64748b" }}>
-          {value === null ? "0.0%" : `${value.toFixed(1)}%`}
+          {value === null ? "N/A" : `${value.toFixed(1)}%`}
         </span>
       </div>
 
@@ -330,7 +385,27 @@ function MetricChart({ title, metric, color, value, history, now, fresh }: Metri
               </linearGradient>
             </defs>
             <CartesianGrid stroke="#1e293b" strokeDasharray="3 6" vertical={false} />
-            <XAxis dataKey="time" type="number" scale="time" domain={[now - HISTORY_MS, now]} tick={false} axisLine={false} />
+            <XAxis
+              dataKey="time"
+              type="number"
+              scale="time"
+              domain={[now - HISTORY_MS, now]}
+              ticks={[
+                now - HISTORY_MS,
+                now - 15_000,
+                now - 10_000,
+                now - 5_000,
+                now,
+              ]}
+              tickFormatter={(time: number) =>
+                `${Math.round((time - now) / 1_000)}s`
+              }
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={10}
+              allowDataOverflow
+            />
             <YAxis domain={[0, 100]} stroke="#475569" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
             <Area type="monotone" dataKey={metric} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} isAnimationActive={false} />
           </AreaChart>
@@ -338,9 +413,19 @@ function MetricChart({ title, metric, color, value, history, now, fresh }: Metri
       </div>
 
       <div className="flex justify-between font-mono text-[11px] text-[#64748b] border-t border-[#1e293b] pt-4 mt-2">
-        <span>AVG: <span className="text-slate-300">{average ? `${average.toFixed(1)}%` : "N/A"}</span></span>
-        <span>PEAK: <span className="text-slate-300">{peak ? `${peak.toFixed(1)}%` : "N/A"}</span></span>
-        <span>{values.length} samples</span>
+        <span>
+          AVG: {" "}
+          <span className="text-slate-300">
+            {average !== null ? `${average.toFixed(1)}%` : "N/A"}
+          </span>
+        </span>
+
+        <span>
+          PEAK: {" "}
+          <span className="text-slate-300">
+            {peak !== null ? `${peak.toFixed(1)}%` : "N/A"}
+          </span>
+        </span>
       </div>
     </section>
   );
@@ -366,10 +451,28 @@ function App() {
         <div className="flex items-center gap-2 bg-[#0f172a] border border-[#1e293b] px-4 py-2 rounded-lg">
           <span className={`h-2.5 w-2.5 rounded-full ${fresh ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
           <span className="text-xs font-mono uppercase tracking-wider text-[#94a3b8]">
-            {fresh ? 'Active Stream' : connection === 'reconnecting' ? 'Reconnecting...' : 'Connecting...'}
+            {fresh
+              ? 'Active Stream'
+              : connection === 'reconnecting'
+                ? 'Reconnecting...'
+                : connection === 'connecting'
+                  ? 'Connecting...'
+                  : problem
+                    ? "Telemetry Error"
+                    : latest
+                      ? "Data Stale"
+                      : "Awaiting telemetry"}
           </span>
         </div>
       </header>
+
+      {problem && (
+        <div 
+          role="alert" 
+          className="max-w-6xl mx-auto mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        {problem}
+        </div>
+      )}
 
         {/* Dynamic Statistics Bar Row */}
         <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -386,7 +489,7 @@ function App() {
             </p>
           </div>
           <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-xl">
-            <p className="text-xs text-[#94a3b8]">Available Memory</p>
+            <p className="text-xs text-[#94a3b8]">Remaining Memory</p>
             <p className="text-xl font-mono font-bold mt-1 text-slate-200">
             {telemetry ? formatGiB(telemetry.memory.availableBytes) : 'N/A'}
             </p>
