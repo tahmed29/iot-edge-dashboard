@@ -284,31 +284,11 @@ function useTelemetry() {
 }
 
 function App() {
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [serverData, setServerData] = useState<any>(null);
-
-  useEffect(() => {
-    // Establish WebSocket connection to the server
-    const socket = new WebSocket('ws://localhost:8080'); 
-
-    socket.onopen = () => {
-      console.log('Connected to backend telemetry stream!');
-      setIsConnected(true);
-    }
-
-    socket.onmessage = (event) => {
-      const parsed = JSON.parse(event.data);
-      console.log('Incoming raw hardware sample:', parsed);
-      setServerData(parsed); // saving payload to local state
-    }
-
-    socket.onclose = () => {
-      console.log('Socket closed.');
-      setIsConnected(false);
-    }
-
-    return () => socket.close(); 
-  }, []);
+  // Activating the master telemetry stream hook we built in the top half
+  const { connection, latest, history, problem, now, stale } = useTelemetry();
+  
+  const telemetry = latest?.message;
+  const fresh = connection === "connected" && !stale && !problem;
 
   return (
     <div className="min-h-screen bg-[#070b14] text-[#e2e8f0] p-6 font-sans">
@@ -319,14 +299,42 @@ function App() {
           <p className="text-sm text-[#94a3b8] mt-1">Local workstation monitor via distributed sockets</p>
         </div>
         
-        {/* System Network Connection Status Badge */}
+        {/* System Network Connection Status Badge linked to hook state */}
         <div className="flex items-center gap-2 bg-[#0f172a] border border-[#1e293b] px-4 py-2 rounded-lg">
-          <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+          <span className={`h-2.5 w-2.5 rounded-full ${fresh ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
           <span className="text-xs font-mono uppercase tracking-wider text-[#94a3b8]">
-            {isConnected ? 'Active Stream' : 'Disconnected'}
+            {fresh ? 'Active Stream' : connection === 'reconnecting' ? 'Reconnecting...' : 'Connecting...'}
           </span>
         </div>
       </header>
+
+        {/* Dynamic Statistics Bar Row */}
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-xl">
+            <p className="text-xs text-[#94a3b8]">Total Capacity</p>
+            <p className="text-xl font-mono font-bold mt-1 text-slate-200">
+            {telemetry ? formatGiB(telemetry.memory.totalBytes) : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-xl">
+            <p className="text-xs text-[#94a3b8]">Used Memory</p>
+            <p className="text-xl font-mono font-bold mt-1 text-slate-200">
+            {telemetry ? formatGiB(telemetry.memory.usedBytes) : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-xl">
+            <p className="text-xs text-[#94a3b8]">Available Memory</p>
+            <p className="text-xl font-mono font-bold mt-1 text-slate-200">
+            {telemetry ? formatGiB(telemetry.memory.availableBytes) : 'N/A'}
+            </p>
+          </div>
+          <div className="bg-[#0f172a] border border-[#1e293b] p-4 rounded-xl">
+            <p className="text-xs text-[#94a3b8]">Local Clock</p>
+            <p className="text-xl font-mono font-bold mt-1 text-slate-400">
+              {formatTime(now)}
+            </p>
+          </div>
+        </div>
 
       {/* Main Grid Layout Panels */}
       <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -335,12 +343,13 @@ function App() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">Processor Utilization</h2>
             <span className="text-xl font-mono text-cyan-400 font-bold">
-              {serverData?.data ? `${serverData.data.cpuLoad}%` : '0.0%'}
+              {telemetry ? `${telemetry.cpu.usagePercent.toFixed(1)}%` : '0.0%'}
             </span>
           </div>
-          {/* Live Chart Graphic */}
+          {/* Live Chart Graphic Placeholder */}
           <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            [ TODO: replace placeholder with chart engine canvas ]
+            {/* TODO: link history timeline arrays to a re-charts sub-component widget */}
+            [ CPU Chart Canvas Area ]
           </div>
         </section>
 
@@ -349,12 +358,13 @@ function App() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">System Memory Pool</h2>
             <span className="text-xl font-mono text-violet-400 font-bold">
-              {serverData?.data ? `${serverData.data.ramUsedPercent}%` : '0.0%'}
+              {telemetry ? `${telemetry.memory.usagePercent.toFixed(1)}%` : '0.0%'}
             </span>
           </div>
-          {/* Live Chart Graphic */}
+          {/* Live Chart Graphic Placeholder */}
           <div className="h-48 bg-[#070b14] border border-[#1e293b] border-dashed rounded-lg flex items-center justify-center text-xs text-[#475569] font-mono">
-            [ TODO: pass history array into graph rows ]
+            {/* TODO: map background history arrays into linear graphic vectors */}
+            [ RAM Chart Canvas Area ]
           </div>
         </section>
       </main>
