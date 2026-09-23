@@ -444,7 +444,7 @@ function App() {
       <header className="max-w-6xl mx-auto flex justify-between items-center border-b border-[#1e293b] pb-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Edge Telemetry Control Center</h1>
-          <p className="text-sm text-[#94a3b8] mt-1">Local workstation monitor via distributed sockets</p>
+          <p className="text-sm text-[#94a3b8] mt-1">Live CPU and memory monitoring from your local Windows machine.</p>
         </div>
         
         {/* System Network Connection Status Badge linked to hook state */}
